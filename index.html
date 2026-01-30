@@ -1,0 +1,2249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Productivity Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            background-color: #0f172a;
+            color: #f1f5f9;
+        }
+
+        /* Analog Clock Styles */
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Modal backdrop */
+        .modal-backdrop {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+        }
+
+        /* Animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+
+        /* Spinner */
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #334155;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .animate-pulse-slow {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        /* Notification Overlay Styles */
+        .notification-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            animation: overlayFadeIn 0.3s ease-out;
+        }
+
+        @keyframes overlayFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes overlayPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .notification-content {
+            text-align: center;
+            animation: overlayPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes ringPulse {
+            0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.7); }
+            70% { box-shadow: 0 0 0 30px rgba(244, 63, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+        }
+
+        .notification-ring {
+            animation: ringPulse 1.5s ease-out infinite;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+
+        .notification-shake {
+            animation: shake 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <!-- Settings Button (Top Right) -->
+    <button id="settings-btn" class="fixed top-4 right-4 z-40 p-3 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v10M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M1 12h6m6 0h10M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"/></svg>
+    </button>
+
+    <!-- Main Content -->
+    <div class="max-w-6xl mx-auto space-y-6">
+
+        <!-- Hidden elements for calendar functionality -->
+        <div id="calendar-events" class="hidden"></div>
+        <span id="sync-status" class="hidden">Offline</span>
+        <button id="google-auth-btn" class="hidden"></button>
+        <div id="digital-clock" class="hidden"></div>
+        <div id="current-date" class="hidden"></div>
+
+        <!-- Main Section: Pomodoro & Tasks -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Pomodoro Timer -->
+            <div class="lg:col-span-5 bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col items-center">
+                <h2 class="text-slate-500 font-semibold mb-4 text-xs tracking-widest uppercase">Pomodoro Timer</h2>
+
+                <!-- Work Name Input -->
+                <div class="w-full mb-4 space-y-2">
+                    <div class="flex gap-2">
+                        <input type="text" id="pomo-work-name" placeholder="作業名を入力..." class="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-slate-100 text-sm">
+                        <button id="pomo-calendar-btn" class="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition" title="カレンダーから選択">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        </button>
+                    </div>
+                    <!-- Calendar Event Selector (hidden by default) -->
+                    <div id="pomo-calendar-selector" class="hidden max-h-32 overflow-y-auto bg-slate-800/50 rounded-lg border border-slate-700">
+                        <div id="pomo-calendar-events" class="p-2 space-y-1"></div>
+                    </div>
+                </div>
+
+                <!-- Current Task Display -->
+                <div id="current-task-display" class="w-full mb-4 p-3 bg-slate-800/50 rounded-xl text-center hidden">
+                    <span class="text-xs text-slate-500">現在のタスク:</span>
+                    <p id="current-task-name" class="text-sm text-emerald-400 font-medium truncate"></p>
+                </div>
+
+                <!-- Time Selector -->
+                <div class="w-full mb-4">
+                    <p class="text-xs text-slate-500 mb-2 text-center">作業時間</p>
+                    <!-- Preset Buttons -->
+                    <div class="flex gap-1 justify-center flex-wrap mb-3">
+                        <button class="pomo-time-btn px-3 py-1.5 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold border border-slate-700 hover:bg-slate-700 transition" data-minutes="10">10分</button>
+                        <button class="pomo-time-btn px-3 py-1.5 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold border border-slate-700 hover:bg-slate-700 transition" data-minutes="15">15分</button>
+                        <button class="pomo-time-btn px-3 py-1.5 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold border border-slate-700 hover:bg-slate-700 transition" data-minutes="20">20分</button>
+                        <button class="pomo-time-btn px-3 py-1.5 bg-rose-500/20 text-rose-400 rounded-lg text-xs font-bold border border-rose-500/30 hover:bg-rose-500/30 transition" data-minutes="25">25分</button>
+                    </div>
+                    <!-- Custom Time Input -->
+                    <div class="flex items-center justify-center gap-1">
+                        <button id="min-down" class="w-7 h-7 bg-slate-800 text-slate-400 rounded-lg text-sm font-bold border border-slate-700 hover:bg-slate-700 transition flex items-center justify-center">−</button>
+                        <input type="number" id="custom-minutes" min="1" max="99" value="25" class="w-12 h-8 bg-slate-800 border border-slate-700 rounded-lg text-center text-slate-100 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-rose-500">
+                        <button id="min-up" class="w-7 h-7 bg-slate-800 text-slate-400 rounded-lg text-sm font-bold border border-slate-700 hover:bg-slate-700 transition flex items-center justify-center">+</button>
+                        <span class="text-xs text-slate-500">分</span>
+                    </div>
+                </div>
+
+                <!-- Mode Selector -->
+                <div class="flex flex-col gap-2 mb-6 w-full">
+                    <div class="flex gap-2 justify-center">
+                        <button id="mode-work" class="px-4 py-2 bg-rose-500/20 text-rose-400 rounded-lg text-xs font-bold border border-rose-500/30 hover:bg-rose-500/30 transition">作業</button>
+                        <button id="mode-long" class="px-4 py-2 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold border border-slate-700 hover:bg-slate-700 transition">長休憩 15分</button>
+                    </div>
+                    <div class="flex gap-1 justify-center">
+                        <span class="text-xs text-slate-500 self-center mr-1">休憩:</span>
+                        <button class="break-time-btn px-3 py-1.5 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold border border-slate-700 hover:bg-slate-700 transition" data-minutes="1">1分</button>
+                        <button class="break-time-btn px-3 py-1.5 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold border border-slate-700 hover:bg-slate-700 transition" data-minutes="3">3分</button>
+                        <button class="break-time-btn px-3 py-1.5 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold border border-slate-700 hover:bg-slate-700 transition" data-minutes="5">5分</button>
+                    </div>
+                </div>
+
+                <div class="relative mb-8">
+                    <svg class="w-48 h-48 transform -rotate-90">
+                        <circle cx="96" cy="96" r="88" stroke="currentColor" stroke-width="8" fill="transparent" class="text-slate-800" />
+                        <circle id="timer-progress" cx="96" cy="96" r="88" stroke="currentColor" stroke-width="8" fill="transparent" stroke-dasharray="552.92" stroke-dashoffset="0" class="text-rose-500 transition-all duration-1000" />
+                    </svg>
+                    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
+                        <div id="pomodoro-display" class="text-5xl font-light text-slate-100">25:00</div>
+                        <div id="pomo-mode-label" class="text-xs text-slate-500 mt-1">作業モード</div>
+                    </div>
+                </div>
+                <div class="flex gap-4 mb-6">
+                    <button id="pomo-start" class="px-8 py-3 bg-slate-100 text-slate-900 rounded-full font-bold hover:bg-white transition shadow-lg">START</button>
+                    <button id="pomo-reset" class="px-8 py-3 bg-slate-800 text-slate-300 rounded-full font-bold hover:bg-slate-700 transition border border-slate-700">RESET</button>
+                </div>
+                <div class="flex gap-2">
+                    <div id="pomo-dot-1" class="w-3 h-3 rounded-full bg-slate-800"></div>
+                    <div id="pomo-dot-2" class="w-3 h-3 rounded-full bg-slate-800"></div>
+                    <div id="pomo-dot-3" class="w-3 h-3 rounded-full bg-slate-800"></div>
+                    <div id="pomo-dot-4" class="w-3 h-3 rounded-full bg-slate-800"></div>
+                </div>
+                <div id="pomo-stats" class="mt-4 text-xs text-slate-500">本日: <span id="today-pomos">0</span> ポモドーロ完了</div>
+            </div>
+
+            <!-- Tasks & Activity Log -->
+            <div class="lg:col-span-7 flex flex-col gap-6">
+                <!-- Add Task -->
+                <!-- 1. Today's Schedule -->
+                <div class="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-slate-500 font-bold text-xs tracking-widest uppercase flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            Today's Schedule
+                        </h2>
+                        <div class="flex items-center gap-2">
+                            <button id="google-connect-btn" class="text-[10px] font-bold text-blue-400 bg-blue-900/30 px-2 py-1 rounded hover:bg-blue-900/50 transition flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                                Connect
+                            </button>
+                            <button id="refresh-calendar-btn" class="text-[10px] font-bold text-blue-400 bg-blue-900/30 px-2 py-1 rounded hover:bg-blue-900/50 transition flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                                更新
+                            </button>
+                            <span id="calendar-sync-status" class="text-[10px] font-bold text-slate-500 bg-slate-800 px-2 py-1 rounded uppercase tracking-tighter">Offline</span>
+                        </div>
+                    </div>
+                    <div id="calendar-events-bottom" class="space-y-2 max-h-48 overflow-y-auto pr-2">
+                        <div class="text-center py-4 text-slate-600 text-xs">
+                            <p>カレンダーを同期してください</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Quick Task -->
+                <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800">
+                    <h2 class="text-slate-100 font-bold mb-4 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                        Quick Task
+                    </h2>
+                    <div class="flex gap-2">
+                        <input type="text" id="task-input" placeholder="何を完了させますか？" class="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-100 text-sm">
+                        <button id="add-task-btn" class="p-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        </button>
+                    </div>
+                    <div id="task-list" class="mt-4 space-y-2 max-h-32 overflow-y-auto pr-1"></div>
+                </div>
+
+                <!-- 3. Execution Log -->
+                <div class="bg-slate-900/50 p-6 rounded-3xl border border-slate-800 flex-1">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-slate-500 font-bold text-xs tracking-widest uppercase flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+                            Execution Log
+                        </h2>
+                        <div class="flex gap-2">
+                            <button id="sync-obsidian-btn" class="text-[10px] font-bold text-violet-400 bg-violet-900/30 px-2 py-1 rounded hover:bg-violet-900/50 transition flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3m6.366 1.634l-2.122 2.122M21 12h-3m-1.634 6.366l-2.122-2.122M12 21v-3m-6.366-1.634l2.122-2.122M3 12h3m1.634-6.366l2.122 2.122"/></svg>
+                                Obsidian
+                            </button>
+                            <button id="copy-md-btn" class="text-[10px] font-bold text-emerald-400 bg-emerald-900/30 px-2 py-1 rounded hover:bg-emerald-900/50 transition">Copy MD</button>
+                            <button id="export-md-btn" class="text-[10px] font-bold text-purple-400 bg-purple-900/30 px-2 py-1 rounded hover:bg-purple-900/50 transition">Export MD</button>
+                            <button id="export-csv-btn" class="text-[10px] font-bold text-slate-500 bg-slate-800 px-2 py-1 rounded hover:bg-slate-700 transition">Export CSV</button>
+                        </div>
+                    </div>
+                    <div id="activity-log" class="space-y-2 max-h-40 overflow-y-auto pr-2">
+                        <div class="text-center py-2 text-slate-600 text-xs">アクティビティはまだありません</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0" id="settings-backdrop"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-slate-900 rounded-3xl border border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-hidden animate-slide-up">
+                <div class="p-6 border-b border-slate-800 flex items-center justify-between">
+                    <h2 class="text-xl font-bold text-slate-100">Settings</h2>
+                    <button id="close-settings" class="p-2 hover:bg-slate-800 rounded-lg transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto max-h-[calc(90vh-120px)] space-y-8">
+                    <!-- Google Calendar Settings -->
+                    <div class="space-y-4">
+                        <h3 class="text-sm font-bold text-slate-300 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-blue-400" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/></svg>
+                            Google Calendar API
+                        </h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-xs text-slate-500 mb-1 block">Client ID</label>
+                                <input type="text" id="google-client-id" placeholder="xxxxx.apps.googleusercontent.com" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-100 text-sm">
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-500 mb-1 block">API Key</label>
+                                <input type="text" id="google-api-key" placeholder="AIzaSy..." class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-100 text-sm">
+                            </div>
+                            <p class="text-xs text-slate-600">
+                                <a href="https://console.cloud.google.com/" target="_blank" class="text-blue-400 hover:underline">Google Cloud Console</a>でプロジェクトを作成し、Calendar APIを有効化してください。
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Obsidian Settings -->
+                    <div class="space-y-4">
+                        <h3 class="text-sm font-bold text-slate-300 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/></svg>
+                            Obsidian連携
+                        </h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-xs text-slate-500 mb-1 block">Local REST API Key</label>
+                                <input type="text" id="obsidian-api-key" placeholder="API Keyを入力..." class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-100 text-sm font-mono text-xs">
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-500 mb-1 block">ポート番号</label>
+                                <input type="number" id="obsidian-port" placeholder="27123" value="27123" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-100 text-sm">
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-500 mb-1 block">Daily Notesフォルダ（空欄でVault直下）</label>
+                                <input type="text" id="obsidian-daily-folder" placeholder="Daily Notes" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-100 text-sm">
+                            </div>
+                            <p class="text-xs text-slate-600">Obsidianで「Local REST API」プラグインを有効にしてください。</p>
+                        </div>
+                    </div>
+
+                    <!-- If-Then Rules -->
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-sm font-bold text-slate-300 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                                If-Then ルール
+                            </h3>
+                            <button id="add-rule-btn" class="text-xs font-bold text-amber-400 bg-amber-900/30 px-3 py-1.5 rounded-lg hover:bg-amber-900/50 transition">+ 追加</button>
+                        </div>
+                        <p class="text-xs text-slate-600">タスク終了時に表示されるリマインダーを設定できます。</p>
+                        <div id="rules-list" class="space-y-2 max-h-48 overflow-y-auto">
+                            <!-- Rules will be rendered here -->
+                        </div>
+                        <div id="add-rule-form" class="hidden space-y-3 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                            <div>
+                                <label class="text-xs text-slate-500 mb-1 block">もし（If）</label>
+                                <input type="text" id="new-rule-if" placeholder="例: タスクが完了したら" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-100 text-sm">
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-500 mb-1 block">ならば（Then）</label>
+                                <input type="text" id="new-rule-then" placeholder="例: 5分間ストレッチをする" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-100 text-sm">
+                            </div>
+                            <div class="flex gap-2">
+                                <button id="save-rule-btn" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-500 transition">保存</button>
+                                <button id="cancel-rule-btn" class="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg text-xs font-bold hover:bg-slate-600 transition">キャンセル</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-slate-800">
+                    <button id="save-settings" class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-500 transition">設定を保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Completion Modal -->
+    <div id="completion-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0" id="completion-backdrop"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-slate-900 rounded-3xl border border-slate-700 w-full max-w-md overflow-hidden animate-slide-up">
+                <div class="p-6 border-b border-slate-800 text-center">
+                    <div class="w-16 h-16 bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                    </div>
+                    <h2 class="text-xl font-bold text-slate-100">タイマー終了</h2>
+                    <p id="completion-task-name" class="text-sm text-slate-400 mt-2"></p>
+                </div>
+
+                <!-- Time Info -->
+                <div class="p-4 bg-slate-800/50 flex justify-around text-center">
+                    <div>
+                        <p class="text-xs text-slate-500">開始時間</p>
+                        <p id="task-start-time" class="text-lg font-bold text-slate-100">--:--</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500">終了時間</p>
+                        <p id="task-end-time" class="text-lg font-bold text-slate-100">--:--</p>
+                    </div>
+                </div>
+
+                <!-- If-Then Rules Display -->
+                <div id="modal-rules-display" class="p-4 border-t border-slate-800 hidden">
+                    <p class="text-xs text-amber-400 font-bold mb-2">💡 リマインダー</p>
+                    <div id="modal-rules-list" class="space-y-2"></div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="p-6 space-y-3">
+                    <button id="btn-extend" class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-500 transition flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+                        延長する
+                    </button>
+                    <button id="btn-complete" class="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-500 transition flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+                        終了する（完了）
+                    </button>
+                    <button id="btn-reschedule" class="w-full py-3 bg-slate-700 text-slate-300 rounded-xl font-bold hover:bg-slate-600 transition flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        リスケする
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Extend Modal -->
+    <div id="extend-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0" id="extend-backdrop"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-slate-900 rounded-3xl border border-slate-700 w-full max-w-md overflow-hidden animate-slide-up">
+                <div class="p-6 border-b border-slate-800">
+                    <h2 class="text-xl font-bold text-slate-100">延長設定</h2>
+                    <p class="text-sm text-slate-400 mt-1">最大15分まで延長できます</p>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="text-xs text-slate-500 mb-2 block">延長時間</label>
+                        <div class="flex gap-2">
+                            <button class="extend-time-btn flex-1 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-700 transition border border-slate-700" data-minutes="5">5分</button>
+                            <button class="extend-time-btn flex-1 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-700 transition border border-slate-700" data-minutes="10">10分</button>
+                            <button class="extend-time-btn flex-1 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-700 transition border border-slate-700" data-minutes="15">15分</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-500 mb-1 block">完了要件（任意）</label>
+                        <input type="text" id="extend-completion-req" placeholder="この時間で何を完了させる？" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-100 text-sm">
+                    </div>
+                </div>
+                <div class="p-6 border-t border-slate-800 flex gap-3">
+                    <button id="cancel-extend" class="flex-1 py-3 bg-slate-700 text-slate-300 rounded-xl font-bold hover:bg-slate-600 transition">戻る</button>
+                    <button id="confirm-extend" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-500 transition">延長開始</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reschedule Modal -->
+    <div id="reschedule-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0" id="reschedule-backdrop"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-slate-900 rounded-3xl border border-slate-700 w-full max-w-md overflow-hidden animate-slide-up">
+                <div class="p-6 border-b border-slate-800">
+                    <h2 class="text-xl font-bold text-slate-100">リスケジュール</h2>
+                    <p class="text-sm text-slate-400 mt-1">次回の着手予定を設定</p>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="text-xs text-slate-500 mb-1 block">次回着手日</label>
+                        <input type="date" id="reschedule-date" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-100 text-sm">
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-500 mb-1 block">最初の一歩（次回何から始める？）</label>
+                        <input type="text" id="reschedule-first-step" placeholder="例: 資料の3ページ目から読み始める" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-100 text-sm">
+                    </div>
+                </div>
+                <div class="p-6 border-t border-slate-800 flex gap-3">
+                    <button id="cancel-reschedule" class="flex-1 py-3 bg-slate-700 text-slate-300 rounded-xl font-bold hover:bg-slate-600 transition">戻る</button>
+                    <button id="confirm-reschedule" class="flex-1 py-3 bg-amber-600 text-white rounded-xl font-bold hover:bg-amber-500 transition">リスケ確定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Complete with Note Modal -->
+    <div id="complete-note-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0" id="complete-note-backdrop"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-slate-900 rounded-3xl border border-slate-700 w-full max-w-md overflow-hidden animate-slide-up">
+                <div class="p-6 border-b border-slate-800">
+                    <h2 class="text-xl font-bold text-slate-100">作業完了</h2>
+                    <p id="complete-note-task-name" class="text-sm text-emerald-400 mt-1"></p>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="text-xs text-slate-500 mb-1 block">メモ・備考（任意）</label>
+                        <textarea id="complete-note-text" rows="3" placeholder="作業の感想、気づき、次回への申し送りなど..." class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-100 text-sm resize-none"></textarea>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-slate-800 flex gap-3">
+                    <button id="complete-skip-note" class="flex-1 py-3 bg-slate-700 text-slate-300 rounded-xl font-bold hover:bg-slate-600 transition">スキップ</button>
+                    <button id="complete-with-note" class="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-500 transition">完了</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Sound -->
+    <audio id="notification-sound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2telejiZ" type="audio/wav">
+    </audio>
+
+    <!-- Full Screen Notification Overlay (hidden by default) -->
+    <div id="notification-overlay" class="notification-overlay hidden">
+        <div class="notification-content">
+            <div class="notification-ring w-32 h-32 bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-8">
+                <div class="w-24 h-24 bg-rose-500/30 rounded-full flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                </div>
+            </div>
+            <h1 id="overlay-title" class="text-4xl md:text-6xl font-bold text-white mb-4">タイマー終了！</h1>
+            <p id="overlay-work-name" class="text-xl md:text-2xl text-slate-400 mb-2"></p>
+            <p id="overlay-time-info" class="text-lg text-slate-500 mb-8"></p>
+            <button id="overlay-dismiss-btn" class="px-12 py-4 bg-rose-500 hover:bg-rose-400 text-white text-xl font-bold rounded-2xl transition transform hover:scale-105 shadow-lg shadow-rose-500/30">
+                確認して閉じる
+            </button>
+            <p class="text-slate-600 text-sm mt-6">クリックまたはEnterキーで閉じます</p>
+        </div>
+    </div>
+
+    <!-- Log Edit Modal -->
+    <div id="log-edit-modal" class="fixed inset-0 z-50 hidden">
+        <div class="modal-backdrop absolute inset-0" onclick="closeLogEditModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-slate-900 rounded-3xl border border-slate-700 w-full max-w-md overflow-hidden animate-slide-up">
+                <div class="p-6 border-b border-slate-800">
+                    <h2 class="text-xl font-bold text-slate-100">ログを編集</h2>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="text-xs text-slate-500 mb-1 block">内容</label>
+                        <input type="text" id="edit-log-text" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-100 text-sm">
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-500 mb-1 block">メモ（任意）</label>
+                        <textarea id="edit-log-note" rows="2" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-100 text-sm resize-none"></textarea>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-slate-800 flex gap-3">
+                    <button onclick="closeLogEditModal()" class="flex-1 py-3 bg-slate-700 text-slate-300 rounded-xl font-bold hover:bg-slate-600 transition">キャンセル</button>
+                    <button onclick="saveLogEdit()" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-500 transition">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // Configuration & State
+        // ============================================
+        const STORAGE_KEY = 'productivity_hub_v2';
+
+        let state = {
+            // Settings
+            googleClientId: '',
+            googleApiKey: '',
+            obsidianFolder: 'productivity-logs',
+            obsidianApiKey: '',
+            obsidianPort: 27123,
+            obsidianDailyFolder: '',
+            ifThenRules: [],
+
+            // Pomodoro
+            pomoTime: 25 * 60,
+            pomoMode: 'work',
+            pomoInterval: null,
+            isRunning: false,
+            completedSessions: 0,
+            todayPomos: 0,
+            taskStartTime: null,
+            currentTaskId: null,
+            currentWorkName: null,
+
+            // Data
+            tasks: [],
+            logs: [],
+            rescheduledTasks: [],
+
+            // Google
+            googleToken: null
+        };
+
+        let selectedExtendTime = 5;
+
+        // ============================================
+        // Utility Functions
+        // ============================================
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatTime(date) {
+            return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function formatDate(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        // ============================================
+        // State Persistence
+        // ============================================
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    const today = new Date().toDateString();
+
+                    // Reset daily data if date changed
+                    if (parsed.lastDate !== today) {
+                        parsed.todayPomos = 0;
+                        parsed.completedSessions = 0;
+                        parsed.logs = []; // Reset logs on new day
+                    }
+
+                    Object.assign(state, {
+                        googleClientId: parsed.googleClientId || '',
+                        googleApiKey: parsed.googleApiKey || '',
+                        obsidianFolder: parsed.obsidianFolder || 'productivity-logs',
+                        obsidianApiKey: parsed.obsidianApiKey || '',
+                        obsidianPort: parsed.obsidianPort || 27123,
+                        obsidianDailyFolder: parsed.obsidianDailyFolder || '',
+                        ifThenRules: parsed.ifThenRules || [],
+                        tasks: parsed.tasks || [],
+                        logs: parsed.logs || [],
+                        rescheduledTasks: parsed.rescheduledTasks || [],
+                        todayPomos: parsed.todayPomos || 0,
+                        completedSessions: parsed.completedSessions || 0
+                    });
+                }
+            } catch (e) {
+                console.error('Error loading state:', e);
+            }
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    googleClientId: state.googleClientId,
+                    googleApiKey: state.googleApiKey,
+                    obsidianFolder: state.obsidianFolder,
+                    obsidianApiKey: state.obsidianApiKey,
+                    obsidianPort: state.obsidianPort,
+                    obsidianDailyFolder: state.obsidianDailyFolder,
+                    ifThenRules: state.ifThenRules,
+                    tasks: state.tasks,
+                    logs: state.logs,
+                    rescheduledTasks: state.rescheduledTasks,
+                    todayPomos: state.todayPomos,
+                    completedSessions: state.completedSessions,
+                    lastDate: new Date().toDateString()
+                }));
+            } catch (e) {
+                console.error('Error saving state:', e);
+            }
+        }
+
+        // ============================================
+        // Clock (analog clock removed, keeping minimal for compatibility)
+        // ============================================
+        function updateClock() {
+            // Analog clock elements have been removed, no longer needed
+        }
+
+        // ============================================
+        // Pomodoro Timer
+        // ============================================
+        const pomoDisplay = document.getElementById('pomodoro-display');
+        const pomoStartBtn = document.getElementById('pomo-start');
+        const pomoResetBtn = document.getElementById('pomo-reset');
+        const progressCircle = document.getElementById('timer-progress');
+        const pomoModeLabel = document.getElementById('pomo-mode-label');
+        const totalOffset = 552.92;
+
+        const modeButtons = {
+            work: document.getElementById('mode-work'),
+            long: document.getElementById('mode-long')
+        };
+
+        const POMO_TIMES = { work: 25 * 60, break: 5 * 60, long: 15 * 60 };
+        let selectedWorkMinutes = 25;
+        let selectedBreakMinutes = 5;
+        let cachedCalendarEvents = [];
+
+        function getMaxTime() {
+            if (state.pomoMode === 'work') {
+                return selectedWorkMinutes * 60;
+            } else if (state.pomoMode === 'break') {
+                return selectedBreakMinutes * 60;
+            }
+            return POMO_TIMES[state.pomoMode] || POMO_TIMES.work;
+        }
+
+        function updatePomoDisplay() {
+            const m = Math.floor(state.pomoTime / 60);
+            const s = state.pomoTime % 60;
+            pomoDisplay.innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+
+            const maxTime = getMaxTime();
+            const offset = totalOffset - (state.pomoTime / maxTime) * totalOffset;
+            progressCircle.style.strokeDashoffset = offset;
+        }
+
+        // Update visual appearance based on current mode
+        function updatePomoModeAppearance() {
+            const mode = state.pomoMode;
+
+            // Remove all color classes from timer display
+            pomoDisplay.classList.remove('text-slate-100', 'text-rose-400', 'text-green-400', 'text-blue-400');
+
+            // Update work and long break buttons
+            Object.keys(modeButtons).forEach(key => {
+                const btn = modeButtons[key];
+                btn.classList.remove('bg-rose-500/20', 'text-rose-400', 'border-rose-500/30',
+                                    'bg-green-500/20', 'text-green-400', 'border-green-500/30',
+                                    'bg-blue-500/20', 'text-blue-400', 'border-blue-500/30');
+
+                if (key === mode) {
+                    if (mode === 'work') {
+                        btn.classList.add('bg-rose-500/20', 'text-rose-400', 'border-rose-500/30');
+                    } else {
+                        btn.classList.add('bg-blue-500/20', 'text-blue-400', 'border-blue-500/30');
+                    }
+                } else {
+                    btn.classList.add('bg-slate-800', 'text-slate-400', 'border-slate-700');
+                }
+            });
+
+            // Update break time buttons
+            document.querySelectorAll('.break-time-btn').forEach(btn => {
+                btn.classList.remove('bg-green-500/20', 'text-green-400', 'border-green-500/30');
+                btn.classList.add('bg-slate-800', 'text-slate-400', 'border-slate-700');
+                if (mode === 'break' && parseInt(btn.dataset.minutes) === selectedBreakMinutes) {
+                    btn.classList.remove('bg-slate-800', 'text-slate-400', 'border-slate-700');
+                    btn.classList.add('bg-green-500/20', 'text-green-400', 'border-green-500/30');
+                }
+            });
+
+            // Update progress circle and display colors
+            progressCircle.classList.remove('text-rose-500', 'text-green-500', 'text-blue-500');
+            if (mode === 'work') {
+                progressCircle.classList.add('text-rose-500');
+                pomoDisplay.classList.add('text-slate-100');
+                pomoModeLabel.innerText = '作業モード';
+                pomoModeLabel.className = 'text-xs text-slate-500 mt-1';
+            } else if (mode === 'break') {
+                progressCircle.classList.add('text-green-500');
+                pomoDisplay.classList.add('text-green-400');
+                pomoModeLabel.innerText = '休憩モード';
+                pomoModeLabel.className = 'text-xs text-green-500 mt-1';
+            } else {
+                progressCircle.classList.add('text-blue-500');
+                pomoDisplay.classList.add('text-blue-400');
+                pomoModeLabel.innerText = '長休憩モード';
+                pomoModeLabel.className = 'text-xs text-blue-500 mt-1';
+            }
+        }
+
+        function setPomoMode(mode) {
+            if (state.isRunning) return;
+
+            state.pomoMode = mode;
+            updatePomoModeAppearance();
+            state.pomoTime = getMaxTime();
+            updatePomoDisplay();
+        }
+
+        function playNotification() {
+            const isWorkMode = state.pomoMode === 'work';
+            const workName = state.currentWorkName;
+            const title = isWorkMode ? 'タイマー終了！' : '休憩終了！';
+            const body = isWorkMode
+                ? (workName ? `「${workName}」の作業時間が終了しました` : '作業時間が終了しました')
+                : '休憩時間が終了しました。作業を再開しましょう！';
+
+            // 1. Play notification sound (repeat 3 times for emphasis)
+            try {
+                const sound = document.getElementById('notification-sound');
+                let playCount = 0;
+                const playSound = () => {
+                    sound.currentTime = 0;
+                    sound.play().catch(() => {});
+                    playCount++;
+                    if (playCount < 3) {
+                        setTimeout(playSound, 500);
+                    }
+                };
+                playSound();
+            } catch (e) {}
+
+            // 2. Browser notification
+            if (Notification.permission === 'granted') {
+                try {
+                    const notification = new Notification('Productivity Hub', {
+                        body: body,
+                        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🍅</text></svg>',
+                        tag: 'pomodoro-timer',
+                        requireInteraction: true,
+                        silent: false
+                    });
+
+                    notification.onclick = () => {
+                        window.focus();
+                        notification.close();
+                    };
+                } catch (e) {}
+            }
+
+            // 3. Full screen overlay notification
+            showNotificationOverlay(title, workName, isWorkMode);
+        }
+
+        function showNotificationOverlay(title, workName, isWorkMode) {
+            const overlay = document.getElementById('notification-overlay');
+            const overlayTitle = document.getElementById('overlay-title');
+            const overlayWorkName = document.getElementById('overlay-work-name');
+            const overlayTimeInfo = document.getElementById('overlay-time-info');
+
+            overlayTitle.textContent = title;
+            overlayWorkName.textContent = workName ? `「${workName}」` : '';
+
+            if (state.taskStartTime) {
+                const startTime = formatTime(state.taskStartTime);
+                const endTime = formatTime(new Date());
+                overlayTimeInfo.textContent = `${startTime} → ${endTime}`;
+            } else {
+                overlayTimeInfo.textContent = '';
+            }
+
+            // Change color based on mode
+            const ring = overlay.querySelector('.notification-ring');
+            const icon = overlay.querySelector('svg');
+            const btn = document.getElementById('overlay-dismiss-btn');
+
+            if (isWorkMode) {
+                ring.className = 'notification-ring w-32 h-32 bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-8';
+                icon.classList.remove('text-green-400');
+                icon.classList.add('text-rose-400');
+                btn.classList.remove('bg-green-500', 'hover:bg-green-400', 'shadow-green-500/30');
+                btn.classList.add('bg-rose-500', 'hover:bg-rose-400', 'shadow-rose-500/30');
+            } else {
+                ring.className = 'notification-ring w-32 h-32 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-8';
+                icon.classList.remove('text-rose-400');
+                icon.classList.add('text-green-400');
+                btn.classList.remove('bg-rose-500', 'hover:bg-rose-400', 'shadow-rose-500/30');
+                btn.classList.add('bg-green-500', 'hover:bg-green-400', 'shadow-green-500/30');
+            }
+
+            overlay.classList.remove('hidden');
+
+            // Add shake effect
+            const content = overlay.querySelector('.notification-content');
+            content.classList.add('notification-shake');
+            setTimeout(() => content.classList.remove('notification-shake'), 500);
+
+            // Focus the dismiss button for keyboard accessibility
+            setTimeout(() => btn.focus(), 100);
+        }
+
+        function hideNotificationOverlay() {
+            const overlay = document.getElementById('notification-overlay');
+            overlay.classList.add('hidden');
+        }
+
+        // Event listeners for overlay dismiss
+        document.getElementById('overlay-dismiss-btn').addEventListener('click', () => {
+            hideNotificationOverlay();
+        });
+
+        document.getElementById('notification-overlay').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('notification-overlay')) {
+                hideNotificationOverlay();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === 'Escape') {
+                const overlay = document.getElementById('notification-overlay');
+                if (!overlay.classList.contains('hidden')) {
+                    hideNotificationOverlay();
+                }
+            }
+        });
+
+        function showCompletionModal() {
+            const modal = document.getElementById('completion-modal');
+            const workName = state.currentWorkName || 'ポモドーロ';
+
+            document.getElementById('completion-task-name').innerText = workName;
+            document.getElementById('task-start-time').innerText = state.taskStartTime ? formatTime(state.taskStartTime) : '--:--';
+            document.getElementById('task-end-time').innerText = formatTime(new Date());
+
+            // Show If-Then Rules
+            const rulesDisplay = document.getElementById('modal-rules-display');
+            const rulesList = document.getElementById('modal-rules-list');
+
+            if (state.ifThenRules.length > 0) {
+                rulesDisplay.classList.remove('hidden');
+                rulesList.innerHTML = state.ifThenRules.map(rule => `
+                    <div class="p-2 bg-amber-900/20 rounded-lg text-xs">
+                        <span class="text-slate-400">If:</span> <span class="text-slate-200">${escapeHtml(rule.ifPart)}</span><br>
+                        <span class="text-slate-400">Then:</span> <span class="text-amber-300">${escapeHtml(rule.thenPart)}</span>
+                    </div>
+                `).join('');
+            } else {
+                rulesDisplay.classList.add('hidden');
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        // Calendar selector for work name (declare early to avoid reference error)
+        const pomoWorkNameInput = document.getElementById('pomo-work-name');
+
+        function getPomoWorkName() {
+            return pomoWorkNameInput ? pomoWorkNameInput.value.trim() : null;
+        }
+
+        pomoStartBtn.addEventListener('click', () => {
+            if (state.isRunning) {
+                clearInterval(state.pomoInterval);
+                state.pomoInterval = null;
+                pomoStartBtn.innerText = 'START';
+                state.isRunning = false;
+            } else {
+                state.isRunning = true;
+                state.taskStartTime = new Date();
+                state.currentWorkName = getPomoWorkName();
+                pomoStartBtn.innerText = 'PAUSE';
+
+                // Determine work name: input field > selected task > none
+                let workName = state.currentWorkName;
+                if (!workName && state.currentTaskId) {
+                    const currentTask = state.tasks.find(t => t.id === state.currentTaskId);
+                    if (currentTask) {
+                        workName = currentTask.text;
+                        state.currentWorkName = workName; // Also set for completion log
+                    }
+                }
+
+                const logText = state.pomoMode === 'work'
+                    ? (workName ? `「${workName}」作業開始` : '作業開始')
+                    : '休憩開始';
+                addLogEntry(logText, 'start');
+
+                // Clear any existing interval first
+                if (state.pomoInterval) {
+                    clearInterval(state.pomoInterval);
+                }
+
+                state.pomoInterval = setInterval(() => {
+                    if (state.pomoTime > 0) {
+                        state.pomoTime--;
+                        updatePomoDisplay();
+                    }
+
+                    if (state.pomoTime <= 0) {
+                        // Stop the interval immediately
+                        clearInterval(state.pomoInterval);
+                        state.pomoInterval = null;
+                        state.isRunning = false;
+                        state.pomoTime = 0; // Ensure it's exactly 0
+                        updatePomoDisplay();
+                        pomoStartBtn.innerText = 'START';
+
+                        // Play notification
+                        playNotification();
+
+                        if (state.pomoMode === 'work') {
+                            showCompletionModal();
+                        } else {
+                            addLogEntry(state.pomoMode === 'break' ? '短休憩完了' : '長休憩完了', 'break');
+                            setPomoMode('work');
+                        }
+                        saveState();
+                    }
+                }, 1000);
+            }
+        });
+
+        pomoResetBtn.addEventListener('click', () => {
+            clearInterval(state.pomoInterval);
+            state.isRunning = false;
+            pomoStartBtn.innerText = 'START';
+            state.pomoTime = getMaxTime();
+            state.taskStartTime = null;
+            updatePomoDisplay();
+        });
+
+        modeButtons.work.addEventListener('click', () => setPomoMode('work'));
+        modeButtons.long.addEventListener('click', () => setPomoMode('long'));
+
+        // Break time selector buttons
+        document.querySelectorAll('.break-time-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                if (state.isRunning) return;
+
+                selectedBreakMinutes = parseInt(this.dataset.minutes);
+                state.pomoMode = 'break';
+                state.pomoTime = selectedBreakMinutes * 60;
+                updatePomoModeAppearance();
+                updatePomoDisplay();
+            });
+        });
+
+        // Time selector buttons
+        document.querySelectorAll('.pomo-time-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                if (state.isRunning) return;
+
+                selectedWorkMinutes = parseInt(this.dataset.minutes);
+
+                // Update button styles
+                document.querySelectorAll('.pomo-time-btn').forEach(b => {
+                    b.classList.remove('bg-rose-500/20', 'text-rose-400', 'border-rose-500/30');
+                    b.classList.add('bg-slate-800', 'text-slate-400', 'border-slate-700');
+                });
+                this.classList.remove('bg-slate-800', 'text-slate-400', 'border-slate-700');
+                this.classList.add('bg-rose-500/20', 'text-rose-400', 'border-rose-500/30');
+
+                // Update timer if in work mode
+                if (state.pomoMode === 'work') {
+                    state.pomoTime = selectedWorkMinutes * 60;
+                    updatePomoDisplay();
+                    updateCustomTimeInputs();
+                }
+            });
+        });
+
+        // Custom time input elements
+        const customMinutesInput = document.getElementById('custom-minutes');
+        const minUpBtn = document.getElementById('min-up');
+        const minDownBtn = document.getElementById('min-down');
+
+        // Update custom time inputs to reflect current timer
+        function updateCustomTimeInputs() {
+            const mins = Math.floor(state.pomoTime / 60);
+            customMinutesInput.value = mins;
+        }
+
+        // Apply custom time to timer
+        function applyCustomTime() {
+            if (state.isRunning) return;
+
+            let mins = parseInt(customMinutesInput.value) || 1;
+
+            // Clamp values
+            mins = Math.max(1, Math.min(99, mins));
+
+            // Update input with clamped value
+            customMinutesInput.value = mins;
+
+            // Update timer
+            state.pomoTime = mins * 60;
+            selectedWorkMinutes = mins;
+            updatePomoDisplay();
+
+            // Clear preset button selection
+            document.querySelectorAll('.pomo-time-btn').forEach(b => {
+                b.classList.remove('bg-rose-500/20', 'text-rose-400', 'border-rose-500/30');
+                b.classList.add('bg-slate-800', 'text-slate-400', 'border-slate-700');
+            });
+        }
+
+        // Input change handler
+        customMinutesInput.addEventListener('change', applyCustomTime);
+
+        // Button handlers
+        minUpBtn.addEventListener('click', () => {
+            if (state.isRunning) return;
+            let val = parseInt(customMinutesInput.value) || 1;
+            customMinutesInput.value = Math.min(99, val + 1);
+            applyCustomTime();
+        });
+
+        minDownBtn.addEventListener('click', () => {
+            if (state.isRunning) return;
+            let val = parseInt(customMinutesInput.value) || 1;
+            customMinutesInput.value = Math.max(1, val - 1);
+            applyCustomTime();
+        });
+
+        // Calendar selector for work name
+        const pomoCalendarBtn = document.getElementById('pomo-calendar-btn');
+        const pomoCalendarSelector = document.getElementById('pomo-calendar-selector');
+        const pomoCalendarEvents = document.getElementById('pomo-calendar-events');
+
+        pomoCalendarBtn.addEventListener('click', () => {
+            pomoCalendarSelector.classList.toggle('hidden');
+            if (!pomoCalendarSelector.classList.contains('hidden')) {
+                renderPomoCalendarEvents();
+            }
+        });
+
+        function renderPomoCalendarEvents() {
+            if (cachedCalendarEvents.length === 0) {
+                pomoCalendarEvents.innerHTML = '<p class="text-xs text-slate-500 text-center py-2">カレンダーを同期してください</p>';
+                return;
+            }
+
+            pomoCalendarEvents.innerHTML = cachedCalendarEvents.map((event, index) => {
+                const start = event.start.dateTime ? new Date(event.start.dateTime) : null;
+                const timeStr = start ? formatTime(start) : '終日';
+                return `
+                    <div class="pomo-event-item flex items-center gap-2 p-2 hover:bg-slate-700 rounded cursor-pointer transition" data-title="${escapeHtml(event.summary || '')}">
+                        <span class="text-xs text-slate-500">${timeStr}</span>
+                        <span class="text-xs text-slate-200 truncate">${escapeHtml(event.summary || '(タイトルなし)')}</span>
+                    </div>
+                `;
+            }).join('');
+
+            // Add click handlers
+            pomoCalendarEvents.querySelectorAll('.pomo-event-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    pomoWorkNameInput.value = this.dataset.title;
+                    pomoCalendarSelector.classList.add('hidden');
+                });
+            });
+        }
+
+        function updatePomoDots() {
+            for (let i = 1; i <= 4; i++) {
+                const dot = document.getElementById(`pomo-dot-${i}`);
+                const count = state.completedSessions % 4;
+                if (i <= count || (count === 0 && state.completedSessions > 0)) {
+                    dot.classList.remove('bg-slate-800');
+                    dot.classList.add('bg-rose-500');
+                } else {
+                    dot.classList.remove('bg-rose-500');
+                    dot.classList.add('bg-slate-800');
+                }
+            }
+        }
+
+        // ============================================
+        // Tasks
+        // ============================================
+        const taskInput = document.getElementById('task-input');
+        const addTaskBtn = document.getElementById('add-task-btn');
+        const taskList = document.getElementById('task-list');
+
+        function renderTasks() {
+            if (state.tasks.length === 0) {
+                taskList.innerHTML = '';
+                return;
+            }
+
+            taskList.innerHTML = state.tasks.map(task => `
+                <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl group border border-transparent hover:border-slate-700 transition" data-id="${task.id}">
+                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                        <input type="checkbox" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500 cursor-pointer">
+                        <span class="text-sm text-slate-300 truncate">${escapeHtml(task.text)}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button class="task-focus-btn p-1 text-slate-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition" title="このタスクに集中">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <button class="task-delete-btn p-1 text-slate-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            // Add event listeners
+            taskList.querySelectorAll('.task-checkbox').forEach(cb => {
+                cb.addEventListener('change', function() {
+                    const id = this.closest('[data-id]').dataset.id;
+                    const task = state.tasks.find(t => t.id === id);
+                    if (task && this.checked) {
+                        // Uncheck immediately (we'll handle completion in modal)
+                        this.checked = false;
+                        // Show note modal for task completion
+                        showTaskCompleteModal(task);
+                    }
+                });
+            });
+
+            taskList.querySelectorAll('.task-delete-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.closest('[data-id]').dataset.id;
+                    state.tasks = state.tasks.filter(t => t.id !== id);
+                    if (state.currentTaskId === id) {
+                        state.currentTaskId = null;
+                        document.getElementById('current-task-display').classList.add('hidden');
+                    }
+                    saveState();
+                    renderTasks();
+                });
+            });
+
+            taskList.querySelectorAll('.task-focus-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.closest('[data-id]').dataset.id;
+                    const task = state.tasks.find(t => t.id === id);
+                    if (task) {
+                        state.currentTaskId = id;
+                        document.getElementById('current-task-display').classList.remove('hidden');
+                        document.getElementById('current-task-name').innerText = task.text;
+                    }
+                });
+            });
+        }
+
+        addTaskBtn.addEventListener('click', () => {
+            const val = taskInput.value.trim();
+            if (val) {
+                state.tasks.push({
+                    id: Date.now().toString(),
+                    text: val,
+                    createdAt: new Date().toISOString()
+                });
+                saveState();
+                renderTasks();
+                taskInput.value = '';
+            }
+        });
+
+        taskInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addTaskBtn.click();
+        });
+
+        // Task completion with note
+        let pendingCompleteTask = null;
+
+        function showTaskCompleteModal(task) {
+            pendingCompleteTask = task;
+            document.getElementById('complete-note-task-name').innerText = task.text;
+            document.getElementById('complete-note-text').value = '';
+            document.getElementById('complete-note-modal').classList.remove('hidden');
+        }
+
+        function finishTaskComplete(note = '') {
+            if (!pendingCompleteTask) return;
+
+            const task = pendingCompleteTask;
+            const logText = `${task.text} を完了`;
+            addLogEntry(logText, 'task', { note: note || null });
+
+            // Remove task
+            state.tasks = state.tasks.filter(t => t.id !== task.id);
+            if (state.currentTaskId === task.id) {
+                state.currentTaskId = null;
+                document.getElementById('current-task-display').classList.add('hidden');
+            }
+            saveState();
+            renderTasks();
+
+            pendingCompleteTask = null;
+            document.getElementById('complete-note-modal').classList.add('hidden');
+        }
+
+        // ============================================
+        // Logs
+        // ============================================
+        const activityLog = document.getElementById('activity-log');
+
+        function addLogEntry(text, type = 'task', extra = {}) {
+            const now = new Date();
+            state.logs.unshift({
+                text,
+                type,
+                timestamp: now.toISOString(),
+                timeStr: formatTime(now),
+                ...extra
+            });
+            saveState();
+            renderLogs();
+        }
+
+        // Simple markdown to HTML converter for notes
+        function renderMarkdown(text) {
+            if (!text) return '';
+            return text
+                .split('\n')
+                .map(line => {
+                    // Bullet points: - or * or •
+                    if (/^[-*•]\s+/.test(line)) {
+                        return `<div class="flex items-start gap-1"><span class="text-slate-500">•</span><span>${escapeHtml(line.replace(/^[-*•]\s+/, ''))}</span></div>`;
+                    }
+                    // Numbered list: 1. or 1)
+                    const numMatch = line.match(/^(\d+)[.)]\s+(.*)$/);
+                    if (numMatch) {
+                        return `<div class="flex items-start gap-1"><span class="text-slate-500">${numMatch[1]}.</span><span>${escapeHtml(numMatch[2])}</span></div>`;
+                    }
+                    // Regular line
+                    return `<div>${escapeHtml(line)}</div>`;
+                })
+                .join('');
+        }
+
+        function renderLogs() {
+            if (state.logs.length === 0) {
+                activityLog.innerHTML = '<div class="text-center py-2 text-slate-600 text-xs">アクティビティはまだありません</div>';
+                return;
+            }
+
+            const typeColors = {
+                task: 'text-emerald-400',
+                focus: 'text-rose-400',
+                break: 'text-blue-400',
+                start: 'text-yellow-400',
+                reschedule: 'text-amber-400',
+                extend: 'text-purple-400'
+            };
+
+            activityLog.innerHTML = state.logs.slice(0, 50).map((log, index) => `
+                <div class="border-b border-slate-800 pb-2 mb-2 group" data-log-index="${index}">
+                    <div class="flex items-center justify-between text-[11px]">
+                        <span class="${typeColors[log.type] || 'text-slate-400'} font-medium flex-1 min-w-0 truncate">● ${escapeHtml(log.text)}</span>
+                        <div class="flex items-center gap-1 ml-2">
+                            <button class="log-edit-btn p-1 text-slate-600 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition" title="編集">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            </button>
+                            <button class="log-delete-btn p-1 text-slate-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition" title="削除">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            </button>
+                            <span class="text-slate-500 ml-1">${log.timeStr}</span>
+                        </div>
+                    </div>
+                    ${log.note ? `<div class="text-[10px] text-slate-500 mt-1 ml-4">${renderMarkdown(log.note)}</div>` : ''}
+                </div>
+            `).join('');
+
+            // Add event listeners for edit/delete
+            activityLog.querySelectorAll('.log-edit-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const index = parseInt(this.closest('[data-log-index]').dataset.logIndex);
+                    openLogEditModal(index);
+                });
+            });
+
+            activityLog.querySelectorAll('.log-delete-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const index = parseInt(this.closest('[data-log-index]').dataset.logIndex);
+                    if (confirm('このログを削除しますか？')) {
+                        state.logs.splice(index, 1);
+                        saveState();
+                        renderLogs();
+                    }
+                });
+            });
+        }
+
+        // Log edit modal
+        let editingLogIndex = null;
+
+        function openLogEditModal(index) {
+            editingLogIndex = index;
+            const log = state.logs[index];
+            document.getElementById('edit-log-text').value = log.text;
+            document.getElementById('edit-log-note').value = log.note || '';
+            document.getElementById('log-edit-modal').classList.remove('hidden');
+        }
+
+        function closeLogEditModal() {
+            document.getElementById('log-edit-modal').classList.add('hidden');
+            editingLogIndex = null;
+        }
+
+        function saveLogEdit() {
+            if (editingLogIndex === null) return;
+            const text = document.getElementById('edit-log-text').value.trim();
+            const note = document.getElementById('edit-log-note').value.trim();
+
+            if (text) {
+                state.logs[editingLogIndex].text = text;
+                state.logs[editingLogIndex].note = note || null;
+                saveState();
+                renderLogs();
+            }
+            closeLogEditModal();
+        }
+
+        // Export functions
+        document.getElementById('export-csv-btn').addEventListener('click', () => {
+            if (state.logs.length === 0) {
+                alert('エクスポートするログがありません');
+                return;
+            }
+
+            const csv = [
+                ['日時', 'タイプ', '内容'],
+                ...state.logs.map(log => [
+                    new Date(log.timestamp).toLocaleString('ja-JP'),
+                    log.type,
+                    log.text
+                ])
+            ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+
+            downloadFile(`productivity_log_${formatDate(new Date())}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8');
+        });
+
+        document.getElementById('export-md-btn').addEventListener('click', () => {
+            if (state.logs.length === 0) {
+                alert('エクスポートするログがありません');
+                return;
+            }
+
+            const today = new Date();
+            const dateStr = formatDate(today);
+            const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+
+            let md = `# ${dateStr} (${weekdays[today.getDay()]})\n\n`;
+            md += `## Summary\n`;
+            md += `- ポモドーロ完了: ${state.todayPomos}回\n\n`;
+            md += `## Activity Log\n\n`;
+
+            const todayLogs = state.logs.filter(log => {
+                return new Date(log.timestamp).toDateString() === today.toDateString();
+            });
+
+            todayLogs.forEach(log => {
+                const icon = {
+                    task: '✅',
+                    focus: '🍅',
+                    break: '☕',
+                    start: '▶️',
+                    reschedule: '📅',
+                    extend: '⏰'
+                }[log.type] || '•';
+                md += `- ${log.timeStr} ${icon} ${log.text}\n`;
+                if (log.note) {
+                    // Output each line of note with proper indentation
+                    log.note.split('\n').forEach(line => {
+                        if (line.trim()) {
+                            md += `\t${line}\n`;
+                        }
+                    });
+                }
+            });
+
+            // Filter rescheduled tasks: only show tasks scheduled for today or later
+            const todayStr = formatDate(today);
+            const relevantRescheduled = state.rescheduledTasks.filter(task => task.scheduledDate >= todayStr);
+
+            if (relevantRescheduled.length > 0) {
+                md += `\n## Rescheduled Tasks\n\n`;
+                relevantRescheduled.forEach(task => {
+                    md += `- [ ] ${task.text}\n`;
+                    md += `  - 予定日: ${task.scheduledDate}\n`;
+                    if (task.firstStep) {
+                        md += `  - 最初の一歩: ${task.firstStep}\n`;
+                    }
+                });
+            }
+
+            const filename = `${state.obsidianFolder}/${dateStr}.md`;
+            downloadFile(`${dateStr}.md`, md, 'text/markdown;charset=utf-8');
+        });
+
+        // Copy MD to clipboard
+        document.getElementById('copy-md-btn').addEventListener('click', async () => {
+            if (state.logs.length === 0) {
+                alert('コピーするログがありません');
+                return;
+            }
+
+            const today = new Date();
+            const dateStr = formatDate(today);
+            const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+
+            let md = `# ${dateStr} (${weekdays[today.getDay()]})\n\n`;
+            md += `## Summary\n`;
+            md += `- ポモドーロ完了: ${state.todayPomos}回\n\n`;
+            md += `## Activity Log\n\n`;
+
+            const todayLogs = state.logs.filter(log => {
+                return new Date(log.timestamp).toDateString() === today.toDateString();
+            });
+
+            todayLogs.forEach(log => {
+                const icon = {
+                    task: '✅',
+                    focus: '🍅',
+                    break: '☕',
+                    start: '▶️',
+                    reschedule: '📅',
+                    extend: '⏰'
+                }[log.type] || '•';
+                md += `- ${log.timeStr} ${icon} ${log.text}\n`;
+                if (log.note) {
+                    // Output each line of note with proper indentation
+                    log.note.split('\n').forEach(line => {
+                        if (line.trim()) {
+                            md += `\t${line}\n`;
+                        }
+                    });
+                }
+            });
+
+            // Filter rescheduled tasks: only show tasks scheduled for today or later
+            const todayStr = formatDate(today);
+            const relevantRescheduled = state.rescheduledTasks.filter(task => task.scheduledDate >= todayStr);
+
+            if (relevantRescheduled.length > 0) {
+                md += `\n## Rescheduled Tasks\n\n`;
+                relevantRescheduled.forEach(task => {
+                    md += `- [ ] ${task.text}\n`;
+                    md += `  - 予定日: ${task.scheduledDate}\n`;
+                    if (task.firstStep) {
+                        md += `  - 最初の一歩: ${task.firstStep}\n`;
+                    }
+                });
+            }
+
+            try {
+                await navigator.clipboard.writeText(md);
+                // Show feedback
+                const btn = document.getElementById('copy-md-btn');
+                const originalText = btn.innerText;
+                btn.innerText = 'Copied!';
+                btn.classList.remove('bg-emerald-900/30');
+                btn.classList.add('bg-emerald-600');
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.classList.remove('bg-emerald-600');
+                    btn.classList.add('bg-emerald-900/30');
+                }, 1500);
+            } catch (e) {
+                alert('コピーに失敗しました');
+            }
+        });
+
+        function downloadFile(filename, content, type) {
+            const blob = new Blob([content], { type });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+        }
+
+        // ============================================
+        // Obsidian Local REST API Integration
+        // ============================================
+        function getDailyNoteFilename() {
+            const today = new Date();
+            const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+            const dateStr = formatDate(today);
+            const dayOfWeek = weekdays[today.getDay()];
+            const filename = `${dateStr}(${dayOfWeek}).md`;
+
+            if (state.obsidianDailyFolder) {
+                return `${state.obsidianDailyFolder}/${filename}`;
+            }
+            return filename;
+        }
+
+        function generateLogMarkdown() {
+            const today = new Date();
+            const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+            const dateStr = formatDate(today);
+
+            let md = `\n\n---\n\n## Productivity Hub Log\n\n`;
+            md += `### Summary\n`;
+            md += `- ポモドーロ完了: ${state.todayPomos}回\n\n`;
+            md += `### Activity Log\n\n`;
+
+            const todayLogs = state.logs.filter(log => {
+                return new Date(log.timestamp).toDateString() === today.toDateString();
+            });
+
+            if (todayLogs.length === 0) {
+                md += `- アクティビティなし\n`;
+            } else {
+                todayLogs.forEach(log => {
+                    const icon = {
+                        task: '✅',
+                        focus: '🍅',
+                        break: '☕',
+                        start: '▶️',
+                        reschedule: '📅',
+                        extend: '⏰'
+                    }[log.type] || '•';
+                    md += `- ${log.timeStr} ${icon} ${log.text}\n`;
+                    if (log.note) {
+                        log.note.split('\n').forEach(line => {
+                            if (line.trim()) {
+                                md += `\t${line}\n`;
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Filter rescheduled tasks: only show tasks scheduled for today or later
+            const todayStr = formatDate(today);
+            const relevantRescheduled = state.rescheduledTasks.filter(task => task.scheduledDate >= todayStr);
+
+            if (relevantRescheduled.length > 0) {
+                md += `\n### Rescheduled Tasks\n\n`;
+                relevantRescheduled.forEach(task => {
+                    md += `- [ ] ${task.text}\n`;
+                    md += `  - 予定日: ${task.scheduledDate}\n`;
+                    if (task.firstStep) {
+                        md += `  - 最初の一歩: ${task.firstStep}\n`;
+                    }
+                });
+            }
+
+            return md;
+        }
+
+        async function syncToObsidian() {
+            if (!state.obsidianApiKey) {
+                alert('Obsidian API Keyが設定されていません。設定画面で入力してください。');
+                document.getElementById('settings-modal').classList.remove('hidden');
+                return;
+            }
+
+            const btn = document.getElementById('sync-obsidian-btn');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<div class="spinner w-3 h-3"></div> 同期中...`;
+            btn.disabled = true;
+
+            try {
+                const filename = getDailyNoteFilename();
+                const baseUrl = `http://127.0.0.1:${state.obsidianPort}`;
+
+                // First, try to get existing content
+                let existingContent = '';
+                try {
+                    const getResponse = await fetch(`${baseUrl}/vault/${encodeURIComponent(filename)}`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${state.obsidianApiKey}`
+                        }
+                    });
+                    if (getResponse.ok) {
+                        existingContent = await getResponse.text();
+                    }
+                } catch (e) {
+                    // File doesn't exist yet, that's OK
+                }
+
+                // Check if we already have a Productivity Hub section
+                const sectionMarker = '## Productivity Hub Log';
+                const logContent = generateLogMarkdown();
+                let newContent;
+
+                if (existingContent.includes(sectionMarker)) {
+                    // Replace existing section
+                    const sectionStart = existingContent.indexOf('---\n\n## Productivity Hub Log');
+                    if (sectionStart !== -1) {
+                        newContent = existingContent.substring(0, sectionStart) + logContent.trim();
+                    } else {
+                        newContent = existingContent.replace(/## Productivity Hub Log[\s\S]*$/, logContent.trim());
+                    }
+                } else {
+                    // Append to end
+                    newContent = existingContent + logContent;
+                }
+
+                // Save to Obsidian
+                const putResponse = await fetch(`${baseUrl}/vault/${encodeURIComponent(filename)}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${state.obsidianApiKey}`,
+                        'Content-Type': 'text/markdown'
+                    },
+                    body: newContent
+                });
+
+                if (putResponse.ok) {
+                    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg> 完了!`;
+                    btn.classList.remove('bg-violet-900/30');
+                    btn.classList.add('bg-green-600');
+                    setTimeout(() => {
+                        btn.innerHTML = originalHTML;
+                        btn.classList.remove('bg-green-600');
+                        btn.classList.add('bg-violet-900/30');
+                        btn.disabled = false;
+                    }, 2000);
+                } else {
+                    throw new Error(`HTTP ${putResponse.status}`);
+                }
+            } catch (e) {
+                console.error('Obsidian sync error:', e);
+                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg> エラー`;
+                btn.classList.remove('bg-violet-900/30');
+                btn.classList.add('bg-red-600');
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.classList.remove('bg-red-600');
+                    btn.classList.add('bg-violet-900/30');
+                    btn.disabled = false;
+                }, 2000);
+
+                if (e.message.includes('Failed to fetch')) {
+                    alert('Obsidianに接続できません。\n\n確認事項:\n1. Obsidianが起動しているか\n2. Local REST APIプラグインが有効か\n3. HTTPサーバーが有効か');
+                }
+            }
+        }
+
+        document.getElementById('sync-obsidian-btn').addEventListener('click', syncToObsidian);
+
+        // ============================================
+        // Settings Modal
+        // ============================================
+        const settingsModal = document.getElementById('settings-modal');
+
+        document.getElementById('settings-btn').addEventListener('click', () => {
+            document.getElementById('google-client-id').value = state.googleClientId;
+            document.getElementById('google-api-key').value = state.googleApiKey;
+            document.getElementById('obsidian-api-key').value = state.obsidianApiKey;
+            document.getElementById('obsidian-port').value = state.obsidianPort;
+            document.getElementById('obsidian-daily-folder').value = state.obsidianDailyFolder;
+            renderRules();
+            settingsModal.classList.remove('hidden');
+        });
+
+        document.getElementById('close-settings').addEventListener('click', () => {
+            settingsModal.classList.add('hidden');
+        });
+
+        document.getElementById('settings-backdrop').addEventListener('click', () => {
+            settingsModal.classList.add('hidden');
+        });
+
+        document.getElementById('save-settings').addEventListener('click', () => {
+            state.googleClientId = document.getElementById('google-client-id').value.trim();
+            state.googleApiKey = document.getElementById('google-api-key').value.trim();
+            state.obsidianApiKey = document.getElementById('obsidian-api-key').value.trim();
+            state.obsidianPort = parseInt(document.getElementById('obsidian-port').value) || 27123;
+            state.obsidianDailyFolder = document.getElementById('obsidian-daily-folder').value.trim();
+            saveState();
+            settingsModal.classList.add('hidden');
+
+            // Reinitialize Google API if credentials changed
+            if (state.googleClientId && state.googleApiKey) {
+                initGoogleApi();
+            }
+        });
+
+        // If-Then Rules
+        function renderRules() {
+            const rulesList = document.getElementById('rules-list');
+            if (state.ifThenRules.length === 0) {
+                rulesList.innerHTML = '<p class="text-xs text-slate-600 text-center py-4">ルールがありません</p>';
+                return;
+            }
+
+            rulesList.innerHTML = state.ifThenRules.map((rule, index) => `
+                <div class="flex items-start justify-between p-3 bg-slate-800/50 rounded-xl group" data-index="${index}">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs text-slate-400">If: <span class="text-slate-200">${escapeHtml(rule.ifPart)}</span></p>
+                        <p class="text-xs text-slate-400 mt-1">Then: <span class="text-amber-300">${escapeHtml(rule.thenPart)}</span></p>
+                    </div>
+                    <button class="delete-rule-btn p-1 text-slate-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+            `).join('');
+
+            rulesList.querySelectorAll('.delete-rule-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const index = parseInt(this.closest('[data-index]').dataset.index);
+                    state.ifThenRules.splice(index, 1);
+                    saveState();
+                    renderRules();
+                });
+            });
+        }
+
+        document.getElementById('add-rule-btn').addEventListener('click', () => {
+            document.getElementById('add-rule-form').classList.remove('hidden');
+        });
+
+        document.getElementById('cancel-rule-btn').addEventListener('click', () => {
+            document.getElementById('add-rule-form').classList.add('hidden');
+            document.getElementById('new-rule-if').value = '';
+            document.getElementById('new-rule-then').value = '';
+        });
+
+        document.getElementById('save-rule-btn').addEventListener('click', () => {
+            const ifPart = document.getElementById('new-rule-if').value.trim();
+            const thenPart = document.getElementById('new-rule-then').value.trim();
+
+            if (ifPart && thenPart) {
+                state.ifThenRules.push({ ifPart, thenPart });
+                saveState();
+                renderRules();
+                document.getElementById('add-rule-form').classList.add('hidden');
+                document.getElementById('new-rule-if').value = '';
+                document.getElementById('new-rule-then').value = '';
+            }
+        });
+
+        // ============================================
+        // Completion Modal Actions
+        // ============================================
+        const completionModal = document.getElementById('completion-modal');
+        const extendModal = document.getElementById('extend-modal');
+        const rescheduleModal = document.getElementById('reschedule-modal');
+
+        document.getElementById('completion-backdrop').addEventListener('click', () => {
+            // Don't close on backdrop click - force user to make a choice
+        });
+
+        // Complete button - show note modal
+        const completeNoteModal = document.getElementById('complete-note-modal');
+
+        document.getElementById('btn-complete').addEventListener('click', () => {
+            completionModal.classList.add('hidden');
+            // Clear pending task (this is pomodoro completion, not task)
+            pendingCompleteTask = null;
+            // Show note modal
+            document.getElementById('complete-note-task-name').innerText = state.currentWorkName || 'ポモドーロ';
+            document.getElementById('complete-note-text').value = '';
+            completeNoteModal.classList.remove('hidden');
+        });
+
+        function finishComplete(note = '') {
+            state.completedSessions++;
+            state.todayPomos++;
+            updatePomoDots();
+            document.getElementById('today-pomos').innerText = state.todayPomos;
+
+            const workName = state.currentWorkName;
+            const logText = workName ? `「${workName}」ポモドーロ完了` : 'ポモドーロ完了';
+            addLogEntry(logText, 'focus', { note: note || null });
+
+            // If there's a current task, complete it too
+            if (state.currentTaskId) {
+                const task = state.tasks.find(t => t.id === state.currentTaskId);
+                if (task) {
+                    addLogEntry(`${task.text} を完了`, 'task', { note: null });
+                    state.tasks = state.tasks.filter(t => t.id !== state.currentTaskId);
+                }
+                state.currentTaskId = null;
+                document.getElementById('current-task-display').classList.add('hidden');
+                renderTasks();
+            }
+
+            // Clear work name input
+            pomoWorkNameInput.value = '';
+            state.currentWorkName = null;
+
+            completeNoteModal.classList.add('hidden');
+
+            if (state.completedSessions % 4 === 0) {
+                setPomoMode('long');
+            } else {
+                setPomoMode('break');
+            }
+            saveState();
+        }
+
+        // Skip note button
+        document.getElementById('complete-skip-note').addEventListener('click', () => {
+            if (pendingCompleteTask) {
+                finishTaskComplete();
+            } else {
+                finishComplete();
+            }
+        });
+
+        // Complete with note button
+        document.getElementById('complete-with-note').addEventListener('click', () => {
+            const note = document.getElementById('complete-note-text').value.trim();
+            if (pendingCompleteTask) {
+                finishTaskComplete(note);
+            } else {
+                finishComplete(note);
+            }
+        });
+
+        // Extend button
+        document.getElementById('btn-extend').addEventListener('click', () => {
+            completionModal.classList.add('hidden');
+            extendModal.classList.remove('hidden');
+            selectedExtendTime = 5;
+            document.querySelectorAll('.extend-time-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-500');
+                btn.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
+            });
+            document.querySelector('[data-minutes="5"]').classList.remove('bg-slate-800', 'text-slate-300', 'border-slate-700');
+            document.querySelector('[data-minutes="5"]').classList.add('bg-blue-600', 'text-white', 'border-blue-500');
+        });
+
+        document.querySelectorAll('.extend-time-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                selectedExtendTime = parseInt(this.dataset.minutes);
+                document.querySelectorAll('.extend-time-btn').forEach(b => {
+                    b.classList.remove('bg-blue-600', 'text-white', 'border-blue-500');
+                    b.classList.add('bg-slate-800', 'text-slate-300', 'border-slate-700');
+                });
+                this.classList.remove('bg-slate-800', 'text-slate-300', 'border-slate-700');
+                this.classList.add('bg-blue-600', 'text-white', 'border-blue-500');
+            });
+        });
+
+        document.getElementById('cancel-extend').addEventListener('click', () => {
+            extendModal.classList.add('hidden');
+            completionModal.classList.remove('hidden');
+        });
+
+        document.getElementById('confirm-extend').addEventListener('click', () => {
+            const completionReq = document.getElementById('extend-completion-req').value.trim();
+
+            state.pomoTime = selectedExtendTime * 60;
+            updatePomoDisplay();
+
+            addLogEntry(`${selectedExtendTime}分延長${completionReq ? ` (目標: ${completionReq})` : ''}`, 'extend');
+
+            extendModal.classList.add('hidden');
+            document.getElementById('extend-completion-req').value = '';
+
+            // Auto-start the timer
+            pomoStartBtn.click();
+        });
+
+        // Reschedule button
+        document.getElementById('btn-reschedule').addEventListener('click', () => {
+            completionModal.classList.add('hidden');
+            rescheduleModal.classList.remove('hidden');
+
+            // Set default date to tomorrow
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            document.getElementById('reschedule-date').value = formatDate(tomorrow);
+        });
+
+        document.getElementById('cancel-reschedule').addEventListener('click', () => {
+            rescheduleModal.classList.add('hidden');
+            completionModal.classList.remove('hidden');
+        });
+
+        document.getElementById('confirm-reschedule').addEventListener('click', () => {
+            const scheduledDate = document.getElementById('reschedule-date').value;
+            const firstStep = document.getElementById('reschedule-first-step').value.trim();
+
+            if (!scheduledDate) {
+                alert('日付を選択してください');
+                return;
+            }
+
+            const task = state.tasks.find(t => t.id === state.currentTaskId);
+            const taskText = task ? task.text : '未完了タスク';
+
+            state.rescheduledTasks.push({
+                id: Date.now().toString(),
+                text: taskText,
+                scheduledDate,
+                firstStep,
+                createdAt: new Date().toISOString()
+            });
+
+            addLogEntry(`${taskText} を ${scheduledDate} にリスケ`, 'reschedule');
+
+            rescheduleModal.classList.add('hidden');
+            document.getElementById('reschedule-date').value = '';
+            document.getElementById('reschedule-first-step').value = '';
+
+            setPomoMode('work');
+            saveState();
+        });
+
+        // ============================================
+        // Google Calendar API
+        // ============================================
+        let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
+
+        function initGoogleApi() {
+            if (!state.googleClientId || !state.googleApiKey) {
+                showDemoCalendar();
+                return;
+            }
+
+            if (typeof gapi !== 'undefined') {
+                gapi.load('client', async () => {
+                    try {
+                        await gapi.client.init({
+                            apiKey: state.googleApiKey,
+                            discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'],
+                        });
+                        gapiInited = true;
+                        checkGoogleReady();
+                    } catch (e) {
+                        console.log('GAPI init error:', e);
+                        showDemoCalendar();
+                    }
+                });
+            }
+
+            if (typeof google !== 'undefined' && google.accounts) {
+                try {
+                    tokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: state.googleClientId,
+                        scope: 'https://www.googleapis.com/auth/calendar.readonly',
+                        callback: '',
+                    });
+                    gisInited = true;
+                    checkGoogleReady();
+                } catch (e) {
+                    console.log('GIS init error:', e);
+                    showDemoCalendar();
+                }
+            }
+        }
+
+        function checkGoogleReady() {
+            if (gapiInited && gisInited) {
+                document.getElementById('google-connect-btn').disabled = false;
+            }
+        }
+
+        function updateCalendarStatus(status) {
+            const statusEl = document.getElementById('calendar-sync-status');
+            if (status === 'synced') {
+                statusEl.innerText = 'Synced';
+                statusEl.className = 'text-[10px] font-bold text-green-400 bg-green-900/30 px-2 py-1 rounded uppercase tracking-tighter';
+            } else {
+                statusEl.innerText = 'Offline';
+                statusEl.className = 'text-[10px] font-bold text-slate-500 bg-slate-800 px-2 py-1 rounded uppercase tracking-tighter';
+            }
+        }
+
+        document.getElementById('google-connect-btn').addEventListener('click', () => {
+            if (!tokenClient) {
+                if (!state.googleClientId || !state.googleApiKey) {
+                    settingsModal.classList.remove('hidden');
+                    return;
+                }
+                showDemoCalendar();
+                return;
+            }
+
+            tokenClient.callback = async (resp) => {
+                if (resp.error !== undefined) {
+                    console.error(resp);
+                    return;
+                }
+                state.googleToken = resp.access_token;
+                updateCalendarStatus('synced');
+                document.getElementById('google-connect-btn').innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+                    Connected
+                `;
+                await loadCalendarEvents();
+            };
+
+            tokenClient.requestAccessToken({ prompt: state.googleToken ? '' : 'consent' });
+        });
+
+        // Keep old button for backwards compatibility (hidden)
+        document.getElementById('google-auth-btn').addEventListener('click', () => {
+            document.getElementById('google-connect-btn').click();
+        });
+
+        async function loadCalendarEvents() {
+            const container = document.getElementById('calendar-events');
+            container.innerHTML = '<div class="flex justify-center py-8"><div class="spinner"></div></div>';
+
+            try {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+
+                // 指定のカレンダーIDから予定を取得
+                const targetCalendarId = 'f62f976b613d1b121ebe79214b7f89b8f46ee87340d97731d310e63d3d26be3c@group.calendar.google.com';
+                let allEvents = [];
+
+                try {
+                    const response = await gapi.client.calendar.events.list({
+                        calendarId: targetCalendarId,
+                        timeMin: today.toISOString(),
+                        timeMax: tomorrow.toISOString(),
+                        showDeleted: false,
+                        singleEvents: true,
+                        orderBy: 'startTime'
+                    });
+
+                    if (response.result.items) {
+                        allEvents = response.result.items.map(event => ({
+                            ...event,
+                            calendarColor: '#3b82f6'
+                        }));
+                        // キャッシュに保存（ポモドーロの作業名選択用）
+                        cachedCalendarEvents = allEvents;
+                    }
+                } catch (e) {
+                    console.error('Calendar load error:', e);
+                }
+
+                // 開始時間でソート
+                allEvents.sort((a, b) => {
+                    const aTime = a.start.dateTime || a.start.date;
+                    const bTime = b.start.dateTime || b.start.date;
+                    return new Date(aTime) - new Date(bTime);
+                });
+
+                if (allEvents.length === 0) {
+                    container.innerHTML = '<div class="text-center py-8 text-slate-500 text-sm">今日の予定はありません</div>';
+                    updateBottomCalendar([]);
+                    return;
+                }
+
+                const now = new Date();
+                container.innerHTML = allEvents.map((event, index) => {
+                    const start = event.start.dateTime ? new Date(event.start.dateTime) : null;
+                    const end = event.end.dateTime ? new Date(event.end.dateTime) : null;
+                    const timeStr = start ? formatTime(start) : '終日';
+                    const isCurrent = start && end && start <= now && now <= end;
+
+                    return `
+                        <div class="flex items-start gap-4 p-4 ${isCurrent ? 'bg-blue-900/20' : 'bg-slate-800/40'} rounded-2xl border-l-4" style="border-left-color: ${isCurrent ? '#3b82f6' : event.calendarColor}">
+                            <div class="text-xs font-bold ${isCurrent ? 'text-blue-400' : 'text-slate-400'} whitespace-nowrap pt-1">${timeStr}</div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-semibold text-slate-100 truncate">${escapeHtml(event.summary || '(タイトルなし)')}</div>
+                                ${event.location ? `<div class="text-xs text-slate-500 mt-1 truncate">${escapeHtml(event.location)}</div>` : ''}
+                            </div>
+                            ${isCurrent ? '<span class="text-[10px] bg-blue-500 text-white px-2 py-0.5 rounded-full font-bold animate-pulse-slow">NOW</span>' : ''}
+                        </div>
+                    `;
+                }).join('');
+
+                // Update bottom calendar too
+                updateBottomCalendar(allEvents);
+
+            } catch (e) {
+                console.error('Error loading calendar:', e);
+                container.innerHTML = `<div class="text-center py-8 text-red-400 text-sm">読み込みエラー</div>`;
+            }
+        }
+
+        function showDemoCalendar() {
+            const container = document.getElementById('calendar-events');
+            const demoEvents = [
+                { time: '09:00', title: '朝会・メールチェック', location: 'Online Meeting' },
+                { time: '11:00', title: 'プロジェクトミーティング', location: 'Meeting Room A' },
+                { time: '13:00', title: 'ランチミーティング', location: 'Cafeteria' },
+                { time: '15:00', title: '資料作成', location: 'Focus Time' },
+                { time: '17:00', title: '週次レビュー', location: 'Online' }
+            ];
+
+            container.innerHTML = demoEvents.map((event, index) => `
+                <div class="flex items-start gap-4 p-4 ${index === 0 ? 'bg-blue-900/20 border-blue-500' : 'bg-slate-800/40 border-slate-600'} rounded-2xl border-l-4">
+                    <div class="text-xs font-bold ${index === 0 ? 'text-blue-400' : 'text-slate-400'} whitespace-nowrap pt-1">${event.time}</div>
+                    <div>
+                        <div class="text-sm font-semibold text-slate-100">${event.title}</div>
+                        <div class="text-xs text-slate-500 mt-1">${event.location}</div>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('sync-status').innerText = 'Demo';
+            document.getElementById('sync-status').className = 'text-[10px] font-bold text-yellow-400 bg-yellow-900/30 px-2 py-1 rounded uppercase tracking-tighter';
+
+            // Update bottom calendar with demo
+            updateBottomCalendar([]);
+        }
+
+        // Update bottom calendar section
+        function updateBottomCalendar(events) {
+            const container = document.getElementById('calendar-events-bottom');
+
+            if (!events || events.length === 0) {
+                container.innerHTML = '<div class="text-center py-4 text-slate-600 text-xs">カレンダーを同期してください</div>';
+                return;
+            }
+
+            const now = new Date();
+            container.innerHTML = events.map((event) => {
+                const start = event.start.dateTime ? new Date(event.start.dateTime) : null;
+                const end = event.end.dateTime ? new Date(event.end.dateTime) : null;
+                const timeStr = start ? formatTime(start) : '終日';
+                const endTimeStr = end ? formatTime(end) : '';
+                const isCurrent = start && end && start <= now && now <= end;
+                const isPast = end && end < now;
+
+                return `
+                    <div class="flex items-center gap-3 p-3 ${isCurrent ? 'bg-blue-900/30 border-blue-500' : isPast ? 'bg-slate-800/30 opacity-50' : 'bg-slate-800/50 border-slate-700'} rounded-xl border-l-4 ${isCurrent ? 'border-l-blue-500' : 'border-l-slate-600'}">
+                        <div class="text-xs font-mono ${isCurrent ? 'text-blue-400' : 'text-slate-500'} whitespace-nowrap">${timeStr}${endTimeStr ? ' - ' + endTimeStr : ''}</div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm ${isCurrent ? 'text-blue-200 font-medium' : isPast ? 'text-slate-500' : 'text-slate-300'} truncate">${escapeHtml(event.summary || '(タイトルなし)')}</div>
+                        </div>
+                        ${isCurrent ? '<span class="text-[9px] bg-blue-500 text-white px-1.5 py-0.5 rounded font-bold">NOW</span>' : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Refresh calendar button
+        document.getElementById('refresh-calendar-btn').addEventListener('click', () => {
+            if (gapiInited && state.googleToken) {
+                loadCalendarEvents();
+            } else if (tokenClient) {
+                tokenClient.callback = async (resp) => {
+                    if (resp.error !== undefined) throw resp;
+                    state.googleToken = resp.access_token;
+                    await loadCalendarEvents();
+                };
+                tokenClient.requestAccessToken({ prompt: '' });
+            }
+        });
+
+        // ============================================
+        // Initialization
+        // ============================================
+        function init() {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+
+            loadState();
+            updateClock();
+            setInterval(updateClock, 1000);
+            updatePomoModeAppearance(); // Sync mode appearance
+            updatePomoDisplay();
+            updateCustomTimeInputs(); // Sync custom time inputs
+            document.getElementById('today-pomos').innerText = state.todayPomos;
+            renderTasks();
+            renderLogs();
+            updatePomoDots();
+
+            setTimeout(() => {
+                initGoogleApi();
+            }, 500);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
