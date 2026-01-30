@@ -560,6 +560,65 @@
 
     <script>
         // ============================================
+        // Alarm Sound
+        // ============================================
+        let audioContext = null;
+        let alarmInterval = null;
+
+        function playAlarmSound() {
+            // Create audio context on first use (requires user interaction)
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            // Resume if suspended
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
+            // Play a series of beeps
+            let beepCount = 0;
+            const maxBeeps = 6;
+
+            function playBeep() {
+                if (beepCount >= maxBeeps) {
+                    clearInterval(alarmInterval);
+                    alarmInterval = null;
+                    return;
+                }
+
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                // Alarm-like frequency pattern
+                oscillator.frequency.value = beepCount % 2 === 0 ? 880 : 660;
+                oscillator.type = 'sine';
+
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.3);
+
+                beepCount++;
+            }
+
+            // Play immediately and then every 400ms
+            playBeep();
+            alarmInterval = setInterval(playBeep, 400);
+        }
+
+        function stopAlarmSound() {
+            if (alarmInterval) {
+                clearInterval(alarmInterval);
+                alarmInterval = null;
+            }
+        }
+
+        // ============================================
         // Configuration & State
         // ============================================
         const STORAGE_KEY = 'productivity_hub_v2';
@@ -865,6 +924,9 @@
 
             overlay.classList.remove('hidden');
 
+            // Play alarm sound
+            playAlarmSound();
+
             // Add shake effect
             const content = overlay.querySelector('.notification-content');
             content.classList.add('notification-shake');
@@ -877,6 +939,9 @@
         function hideNotificationOverlay() {
             const overlay = document.getElementById('notification-overlay');
             overlay.classList.add('hidden');
+
+            // Stop alarm sound
+            stopAlarmSound();
         }
 
         // Event listeners for overlay dismiss
